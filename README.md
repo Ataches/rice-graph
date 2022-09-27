@@ -1,5 +1,5 @@
 # rice-graph
-Project to see via JSON http response with graphs data from specific year
+Project with graphs data in a JSON http response from specific year
 
 ### Install required modules
 

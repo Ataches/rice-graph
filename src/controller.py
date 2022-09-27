@@ -1,18 +1,19 @@
 from flask import Flask, jsonify
 from flask import request
 from models import GraphData
-import graph_processing
 import json
 
+from src.graph_processing import GraphProcessing
 from src.serializers import GraphDataSerializer
 
+graph_processing = GraphProcessing()
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
 
 @app.route("/", methods=['POST'])
 def post_method():
-    response: GraphData = graph_processing.start(json.loads(request.data))
+    response: GraphData = graph_processing.graph_data_by_variety(json.loads(request.data))
     return jsonify(GraphDataSerializer.serialise(response))
 
 
