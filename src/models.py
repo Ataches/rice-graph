@@ -9,4 +9,6 @@ class GraphData:
         self.sbright: float = graph_data["sbright"]
         self.prec: float = graph_data["prec"]
         self.prod: float = graph_data["prod"]
+        self.yield_data: dict = graph_data["yield_data"]
+        self.predicted_line_set: dict = graph_data["predictedLineSet"]
 

@@ -9,5 +9,7 @@ class GraphDataSerializer:
             "rhum": d.rhum,
             "sbright": d.sbright,
             "prec": d.prec,
+            "predictedLineSet": d.predicted_line_set,
+            "yield_data": d.yield_data,
             "prod": d.prod
         }
