@@ -7,44 +7,62 @@ from pmdarima import auto_arima
 from math import isnan
 import matplotlib.pyplot as plt
 from statsmodels.tools.eval_measures import rmse
+from statsmodels.tsa.seasonal import seasonal_decompose
+
 
 def predict_yield(df_saldana_harvest, lower_row_quantity):
     df_saldana_harvest = df_saldana_harvest[['Harvest_Date', 'Yield']]
     df_saldana_harvest.sort_values(by='Harvest_Date', inplace=True)
     df_saldana_harvest.set_index("Harvest_Date", inplace=True)
-    print(auto_arima(df_saldana_harvest['Yield'], seasonal=True).summary())
+
+    df_saldana_harvest = df_saldana_harvest.resample('5D').mean()
+    df_saldana_harvest = df_saldana_harvest.interpolate()
+
+    df_saldana_harvest.asfreq('5D')
+
+    decompose = seasonal_decompose(df_saldana_harvest)
+    decompose.plot()
+    plt.show()
+    decompose.seasonal.plot(figsize=(16, 8))
+    plt.show()
 
     train_size = int(len(df_saldana_harvest) * 0.85)
     test_size = int(len(df_saldana_harvest)) - train_size
 
-    train = df_saldana_harvest[:train_size]
     test = df_saldana_harvest[train_size:]
 
+    # print(auto_arima(df_saldana_harvest, m=12, trace=True).summary())  # Used to get sarimax model
 
-    arima_model = SARIMAX(train['Yield'])
+    arima_model = SARIMAX(df_saldana_harvest, order=(1, 0, 0))
     arima_result = arima_model.fit()
-    forecast_yield = arima_result.forecast(steps=test_size, exog=test['Yield'])
-
-    forecast_yield = pd.DataFrame(forecast_yield)
-    forecast_yield.reset_index(drop=True, inplace=True)
-    forecast_yield.index = test.index
-    forecast_yield['Actual'] = df_saldana_harvest[train_size:]
-    forecast_yield.rename(columns={'predicted_mean': 'Prediccion'}, inplace=True)
-
-    forecast_yield['Actual'].plot(legend=True, color='blue')
-    forecast_yield['Prediccion'].plot(legend=True, color='red')
+    prediction = arima_result.predict(train_size, (train_size+test_size-1)).rename('Prediction')
+    test.plot(legend=True, figsize=(16, 8))
+    prediction.plot(legend=True)
     plt.show()
-    error = rmse(forecast_yield['Prediccion'], forecast_yield['Actual'])
-    print(error)
 
-    print(arima_result.summary())
+    print("Raíz cuadrada media: ", rmse(test['Yield'], prediction))
+
+    arima_result.plot_diagnostics(figsize=(16, 8))
+    plt.show()
+
+    steps_forecast = int(365/5)
+
+    fig, ax = plt.subplots(figsize=(15, 5))
+
+    arima_forecast = arima_result.get_forecast(steps=(steps_forecast*3)).summary_frame()
+    df_saldana_harvest.plot(ax=ax)
+    arima_forecast['mean'].plot(ax=ax, style='k--')
+    ax.fill_between(arima_forecast.index, arima_forecast['mean_ci_lower'], arima_forecast['mean_ci_upper'], color='k', alpha=0.1);
+    ax.set_xlabel('Fecha')
+    ax.set_ylabel('Producción')
+    plt.legend()
+    plt.show()
 
     predicted_line_set: dict = {}
 
     for year_to_predict in range(1, 4):
-        pred_dynamic = arima_result.get_forecast(steps=lower_row_quantity * year_to_predict)
-        forecast_3 = pred_dynamic.predicted_mean.to_numpy()[-1]
-        predicted_line_set[str(2013 + year_to_predict)] = round(forecast_3, 2)
+        forecast_mean = arima_forecast[:steps_forecast*year_to_predict].mean()['mean']
+        predicted_line_set[str(2013 + year_to_predict)] = round(forecast_mean, 2)
 
     return predicted_line_set
 
@@ -87,16 +105,25 @@ class GraphProcessing:
         better_yield: dict = {}
 
         better_yield["primer"] = round(self.df_by_variety[
-            (self.df_by_variety['Harvest_Date'].dt.month < 4) & (self.df_by_variety['Harvest_Date'].dt.year == year)]['Yield'].mean(), 2)
+                                           (self.df_by_variety['Harvest_Date'].dt.month < 4) & (
+                                                       self.df_by_variety['Harvest_Date'].dt.year == year)][
+                                           'Yield'].mean(), 2)
         better_yield["segundo"] = round(self.df_by_variety[
-            (self.df_by_variety['Harvest_Date'].dt.month > 3) & (self.df_by_variety['Harvest_Date'].dt.month < 7) & (
-                    self.df_by_variety['Harvest_Date'].dt.year == year)]['Yield'].mean(), 2)
+                                            (self.df_by_variety['Harvest_Date'].dt.month > 3) & (
+                                                        self.df_by_variety['Harvest_Date'].dt.month < 7) & (
+                                                    self.df_by_variety['Harvest_Date'].dt.year == year)][
+                                            'Yield'].mean(), 2)
         better_yield["tercer"] = round(self.df_by_variety[
-            (self.df_by_variety['Harvest_Date'].dt.month > 6) & (self.df_by_variety['Harvest_Date'].dt.month < 10) & (
-                    self.df_by_variety['Harvest_Date'].dt.year == year)]['Yield'].mean(), 2)
+                                           (self.df_by_variety['Harvest_Date'].dt.month > 6) & (
+                                                       self.df_by_variety['Harvest_Date'].dt.month < 10) & (
+                                                   self.df_by_variety['Harvest_Date'].dt.year == year)]['Yield'].mean(),
+                                       2)
         better_yield["cuarto"] = round(self.df_by_variety[
-            (self.df_by_variety['Harvest_Date'].dt.month > 9) & (self.df_by_variety['Harvest_Date'].dt.year == year)]['Yield'].mean(), 2)
-        return max({key: value for key, value in better_yield.items() if isnan(better_yield.get(key)) == False}.items(), key=lambda k: k[1])
+                                           (self.df_by_variety['Harvest_Date'].dt.month > 9) & (
+                                                       self.df_by_variety['Harvest_Date'].dt.year == year)][
+                                           'Yield'].mean(), 2)
+        return max({key: value for key, value in better_yield.items() if isnan(better_yield.get(key)) == False}.items(),
+                   key=lambda k: k[1])
 
     def graph_data_by_variety(self, msg):
         self.df_by_variety = self.df_productivity_saldana[
@@ -137,7 +164,8 @@ class GraphProcessing:
 
         for i in rows_by_year.keys():
             line_set[str(i)] = round(
-                self.df_by_variety[(self.df_by_variety['Harvest_Date'].dt.year == i)][:lower_row_quantity]['Yield'].mean(), 2)
+                self.df_by_variety[(self.df_by_variety['Harvest_Date'].dt.year == i)][:lower_row_quantity][
+                    'Yield'].mean(), 2)
             df_saldana_harvest = pd.concat([df_saldana_harvest,
                                             self.df_by_variety[self.df_by_variety['Harvest_Date'].dt.year == i]
                                             [:lower_row_quantity]])
@@ -156,6 +184,6 @@ class GraphProcessing:
             graph_data["yield_data"] = max(yield_data.values(), key=lambda k: k[1])
         else:
             graph_data["predictedLineSet"] = {"": 0}
-            graph_data["yield_data"] = self.df_by_bimester(years[len(years)-1])
+            graph_data["yield_data"] = self.df_by_bimester(years[len(years) - 1])
 
         return GraphData(graph_data)
